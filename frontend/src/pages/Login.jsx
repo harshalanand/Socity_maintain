@@ -17,7 +17,14 @@ export function Login() {
 
     try {
       const response = await authAPI.login(formData);
-      login(response.data);
+      // Store complete user data
+      const userData = {
+        id: response.data.user_id,
+        username: response.data.username,
+        role: response.data.role,
+        full_name: response.data.username  // Will be updated when user profile is fetched
+      };
+      login(userData);
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.detail || 'Login failed');

@@ -19,7 +19,7 @@ load_dotenv()
 from database import init_db
 
 # Import routes
-from routes import auth, users, projects, expenses, assets, vendors, quotations, invoices, analytics, members, maintenance, flats, notices
+from routes import auth, users, projects, expenses, assets, vendors, quotations, invoices, analytics, members, maintenance, flats, notices, settings
 
 # Initialize database on startup
 @asynccontextmanager
@@ -65,6 +65,7 @@ app.include_router(members.router, prefix="/api/members", tags=["Members Managem
 app.include_router(maintenance.router, prefix="/api/maintenance", tags=["Maintenance Charges"])
 app.include_router(flats.router, prefix="/api/flats", tags=["Flats/Units"])
 app.include_router(notices.router, prefix="/api/notices", tags=["Notices & Complaints"])
+app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
 
 # Root endpoint
 @app.get("/")
