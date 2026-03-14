@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="description" content="Aashiyana Homes – Society Management Portal"/>
+<meta name="theme-color" content="#1D9E75"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="Aashiyana Homes"/>
+<title>Aashiyana Homes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s;}
+input,select,textarea,button{font-family:inherit;font-size:14px;}
+:root{
+  --teal:#1D9E75;--tl:#E1F5EE;--td:#085041;
+  --amber:#BA7517;--al:#FAEEDA;--ad:#633806;
+  --red:#A32D2D;--rl:#FCEBEB;
+  --green:#3B6D11;--gl:#EAF3DE;
+  --blue:#185FA5;--bl:#E6F1FB;
+  --purple:#534AB7;--pl:#EEEDFE;
+  --border:rgba(0,0,0,0.1);--card:#fff;--bg:#f5f4f0;--bg2:#ebe9e5;
+  --text:#1a1a18;--muted:#6b6b69;--shadow:0 1px 4px rgba(0,0,0,0.08);
+}
+[data-theme=dark]{
+  --teal:#5DCAA5;--tl:#04342C;--td:#9FE1CB;
+  --amber:#EF9F27;--al:#412402;--ad:#FAC775;
+  --red:#F09595;--rl:#501313;
+  --green:#97C459;--gl:#173404;
+  --blue:#85B7EB;--bl:#042C53;
+  --purple:#AFA9EC;--pl:#26215C;
+  --border:rgba(255,255,255,0.1);--card:#1e1e1c;--bg:#111110;--bg2:#1a1a18;
+  --text:#f0ece4;--muted:#9a9a98;--shadow:0 1px 4px rgba(0,0,0,0.4);
+}
+input,select,textarea{width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text);outline:none;transition:border .15s;}
+input:focus,select:focus{border-color:var(--teal);}
+input::placeholder{color:var(--muted);}
+button{cursor:pointer;transition:opacity .15s,transform .1s;}
+button:active{transform:scale(.97);}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes slideDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.fade{animation:fadeIn .2s ease}
+.spin{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .8s linear infinite}
+#toasts{position:fixed;bottom:20px;right:14px;z-index:9999;display:flex;flex-direction:column;gap:8px;}
+.toast{padding:11px 16px;border-radius:10px;font-size:13px;font-weight:600;color:#fff;min-width:200px;max-width:300px;animation:slideDown .25s ease;box-shadow:0 4px 16px rgba(0,0,0,.25);}
+.t-ok{background:var(--teal)}.t-err{background:var(--red)}.t-info{background:var(--blue)}
+@media(max-width:640px){.desktop-only{display:none!important}.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}}
+</style>
+</head>
+<body data-theme="light">
+<div id="root"></div>
+<div id="toasts"></div>
+<script type="text/babel">
+const {useState,useEffect,useCallback,useRef}=React;
+
+/* ── CONSTANTS ── */
+const MN=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const CATS=["Cleaning","Electricity","Plumbing","Security","Repair","Garden","Lift","Water","Salary","Other"];
+const STAFF_ROLES=["Security Guard","Sweeper","Watchman","Plumber","Electrician","Manager","Other"];
+const YEARS=[2023,2024,2025,2026,2027];
+
+/* ── TOAST ── */
+function toast(msg,type="ok"){
+  const el=document.createElement("div");
+  el.className=`toast t-${type}`;el.textContent=msg;
+  document.getElementById("toasts").appendChild(el);
+  setTimeout(()=>el.remove(),3200);
+}
+
+/* ── API HELPER ── */
+async function api(method,url,body){
+  const opts={method,headers:{"Content-Type":"application/json"},credentials:"include"};
+  if(body) opts.body=JSON.stringify(body);
+  const res=await fetch(url,opts);
+  const data=await res.json();
+  if(!res.ok) throw new Error(data.error||"Request failed");
+  return data;
+}
+
+/* ── PDF EXPORTS ── */
+function exportMonthlyPDF(members,collections,expenses,month,year,sName){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();const pw=doc.internal.pageSize.getWidth();
+  doc.setFillColor(29,158,117);doc.rect(0,0,pw,30,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(18);doc.setFont(undefined,"bold");doc.text(sName||"Society",14,13);
+  doc.setFontSize(10);doc.setFont(undefined,"normal");doc.text(`Monthly Report — ${MN[month]} ${year}`,14,22);
+  doc.text(`Generated: ${new Date().toLocaleDateString("en-IN")}`,pw-14,22,{align:"right"});
+  doc.setTextColor(30,30,30);
+  const cols=collections.filter(c=>c.month===month&&c.year===year).sort((a,b)=>a.flat_no.localeCompare(b.flat_no));
+  const tc=cols.reduce((s,c)=>s+Number(c.amount),0);
+  doc.setFontSize(12);doc.setFont(undefined,"bold");doc.text("Fund Collections",14,40);
+  doc.autoTable({startY:44,head:[["Flat","Resident","Amount","Date","Mode","By"]],
+    body:cols.map(c=>[c.flat_no,c.member_name,"₹"+Number(c.amount).toLocaleString("en-IN"),c.date,c.note||"",c.by_name||""]),
+    foot:[["","","₹"+tc.toLocaleString("en-IN"),"","",""]],
+    theme:"grid",headStyles:{fillColor:[29,158,117],fontSize:9},footStyles:{fillColor:[225,245,238],textColor:[8,80,65]},styles:{fontSize:9}});
+  const paidIds=cols.map(c=>c.member_id);
+  const unpaid=members.filter(m=>!paidIds.includes(m.id));
+  if(unpaid.length){
+    doc.setFontSize(12);doc.setFont(undefined,"bold");doc.text("Outstanding Flats",14,doc.lastAutoTable.finalY+10);
+    doc.autoTable({startY:doc.lastAutoTable.finalY+14,head:[["Flat","Resident","Phone","Type"]],
+      body:unpaid.map(m=>[m.flat,m.name,m.phone||"",m.type]),theme:"grid",
+      headStyles:{fillColor:[186,117,23],fontSize:9},styles:{fontSize:9}});
+  }
+  const mStr=String(month+1).padStart(2,"0");
+  const exps=expenses.filter(e=>e.date&&e.date.startsWith(`${year}-${mStr}`));
+  const te=exps.reduce((s,e)=>s+Number(e.amount),0);
+  if(exps.length){
+    const yy=doc.lastAutoTable?doc.lastAutoTable.finalY+10:80;
+    doc.setFontSize(12);doc.setFont(undefined,"bold");doc.text("Expenses",14,yy);
+    doc.autoTable({startY:yy+4,head:[["Date","Category","Description","Amount","By"]],
+      body:exps.map(e=>[e.date,e.category,e.description,"₹"+Number(e.amount).toLocaleString("en-IN"),e.added_by||""]),
+      foot:[["","","Total","₹"+te.toLocaleString("en-IN"),""]],theme:"grid",
+      headStyles:{fillColor:[163,45,45],fontSize:9},footStyles:{fillColor:[252,235,235],textColor:[163,45,45]},styles:{fontSize:9}});
+  }
+  const sy=(doc.lastAutoTable?.finalY||120)+14;
+  doc.setFillColor(241,239,232);doc.roundedRect(14,sy,pw-28,40,3,3,"F");
+  doc.setFontSize(11);doc.setFont(undefined,"bold");doc.setTextColor(30,30,30);doc.text("Summary",20,sy+10);
+  doc.setFont(undefined,"normal");doc.setFontSize(10);
+  doc.text(`Total Collected : ₹${tc.toLocaleString("en-IN")}`,20,sy+20);
+  doc.text(`Total Expenses  : ₹${te.toLocaleString("en-IN")}`,20,sy+30);
+  doc.setFont(undefined,"bold");doc.setTextColor(29,158,117);
+  doc.text(`Net: ₹${(tc-te).toLocaleString("en-IN")}`,pw-16,sy+30,{align:"right"});
+  doc.save(`${(sName||"Society").replace(/ /g,"_")}_${MN[month]}_${year}.pdf`);
+  toast("Monthly PDF downloaded!");
+}
+
+function exportAnnualPDF(members,collections,expenses,year,sName){
+  const {jsPDF}=window.jspdf;const doc=new jsPDF();const pw=doc.internal.pageSize.getWidth();
+  doc.setFillColor(29,158,117);doc.rect(0,0,pw,30,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(18);doc.setFont(undefined,"bold");doc.text(sName||"Society",14,13);
+  doc.setFontSize(10);doc.setFont(undefined,"normal");doc.text(`Annual Report — ${year}`,14,22);
+  doc.text(`Generated: ${new Date().toLocaleDateString("en-IN")}`,pw-14,22,{align:"right"});
+  doc.setTextColor(30,30,30);
+  const rows=MN.map((mn,m)=>{
+    const mc=collections.filter(c=>c.month===m&&c.year===year).reduce((s,c)=>s+Number(c.amount),0);
+    const me=expenses.filter(e=>e.date&&e.date.startsWith(`${year}-${String(m+1).padStart(2,"0")}`)).reduce((s,e)=>s+Number(e.amount),0);
+    const paid=collections.filter(c=>c.month===m&&c.year===year).length;
+    return[mn,String(paid),String(members.length-paid),"₹"+mc.toLocaleString("en-IN"),"₹"+me.toLocaleString("en-IN"),"₹"+(mc-me).toLocaleString("en-IN")];
+  });
+  const tc=collections.filter(c=>c.year===year).reduce((s,c)=>s+Number(c.amount),0);
+  const te=expenses.filter(e=>e.date&&e.date.startsWith(String(year))).reduce((s,e)=>s+Number(e.amount),0);
+  doc.setFontSize(12);doc.setFont(undefined,"bold");doc.text(`Annual Summary — ${year}`,14,40);
+  doc.autoTable({startY:44,head:[["Month","Paid","Pending","Collected","Expenses","Net"]],body:rows,
+    foot:[["Total","","","₹"+tc.toLocaleString("en-IN"),"₹"+te.toLocaleString("en-IN"),"₹"+(tc-te).toLocaleString("en-IN")]],
+    theme:"grid",headStyles:{fillColor:[29,158,117],fontSize:9},footStyles:{fillColor:[225,245,238]},styles:{fontSize:9}});
+  doc.save(`${(sName||"Society").replace(/ /g,"_")}_Annual_${year}.pdf`);
+  toast("Annual PDF downloaded!");
+}
+
+/* ── WA LINK ── */
+function waLink(phone,name,flat,month,year,amount,sName){
+  const msg=`🏠 *${sName||"Aashiyana Homes"} — Maintenance Reminder*\n\nDear *${name}*,\n\nYour maintenance for *${MN[month]} ${year}* amounting *₹${Number(amount).toLocaleString("en-IN")}* is pending for Flat *${flat}*.\n\nKindly pay at the earliest.\n\n_Society Management Committee_`;
+  return `https://wa.me/91${phone}?text=${encodeURIComponent(msg)}`;
+}
+
+/* ── UI ATOMS ── */
+function fmt(n){return"₹"+Number(n||0).toLocaleString("en-IN");}
+function today(){return new Date().toISOString().split("T")[0];}
+
+function Btn({children,color="teal",onClick,style={},size="md",disabled,type="button"}){
+  const bg={teal:"var(--teal)",red:"var(--red)",gray:"var(--bg2)",green:"var(--green)",amber:"var(--amber)"};
+  const col={teal:"#fff",red:"#fff",gray:"var(--text)",green:"#fff",amber:"#fff"};
+  const pad=size==="sm"?"5px 11px":size==="lg"?"12px 28px":"9px 18px";
+  return(<button type={type} onClick={onClick} disabled={disabled} style={{padding:pad,borderRadius:8,border:"1px solid transparent",background:bg[color]||bg.teal,color:col[color]||"#fff",fontWeight:600,fontSize:size==="sm"?12:14,cursor:disabled?"not-allowed":"pointer",opacity:disabled?.6:1,...style}}>{children}</button>);
+}
+function Badge({c="teal",children}){
+  const m={teal:{bg:"var(--tl)",col:"var(--td)"},amber:{bg:"var(--al)",col:"var(--ad)"},red:{bg:"var(--rl)",col:"var(--red)"},green:{bg:"var(--gl)",col:"var(--green)"},blue:{bg:"var(--bl)",col:"var(--blue)"},purple:{bg:"var(--pl)",col:"var(--purple)"},gray:{bg:"var(--bg2)",col:"var(--muted)"}};
+  const s=m[c]||m.teal;
+  return<span style={{background:s.bg,color:s.col,fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:20,whiteSpace:"nowrap"}}>{children}</span>;
+}
+function Card({children,style={}}){return<div style={{background:"var(--card)",borderRadius:12,border:"1px solid var(--border)",padding:"14px 16px",boxShadow:"var(--shadow)",...style}}>{children}</div>;}
+function Stat({label,val,color="teal",sub}){
+  const c={teal:"var(--teal)",amber:"var(--amber)",red:"var(--red)",green:"var(--green)"};
+  return(<div style={{background:"var(--card)",borderRadius:10,border:"1px solid var(--border)",padding:"13px 15px",boxShadow:"var(--shadow)"}}>
+    <div style={{fontSize:11,color:"var(--muted)",marginBottom:3,fontWeight:500}}>{label}</div>
+    <div style={{fontSize:21,fontWeight:700,color:c[color]||c.teal,lineHeight:1.2}}>{val}</div>
+    {sub&&<div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{sub}</div>}
+  </div>);
+}
+function Modal({title,onClose,children,wide}){
+  useEffect(()=>{document.body.style.overflow="hidden";return()=>{document.body.style.overflow="";};},[]);
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:12}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div className="fade" style={{background:"var(--card)",borderRadius:14,padding:"20px 22px",width:"100%",maxWidth:wide?560:430,maxHeight:"92vh",overflowY:"auto",border:"1px solid var(--border)",boxShadow:"0 8px 32px rgba(0,0,0,.3)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <span style={{fontWeight:700,fontSize:15}}>{title}</span>
+        <button onClick={onClose} style={{background:"none",border:"none",fontSize:24,color:"var(--muted)",cursor:"pointer",padding:"0 4px"}}>×</button>
+      </div>
+      {children}
+    </div>
+  </div>);
+}
+function Field({label,children,hint}){
+  return(<div style={{marginBottom:12}}>
+    <label style={{display:"block",fontSize:12,fontWeight:500,color:"var(--muted)",marginBottom:4}}>{label}</label>
+    {children}
+    {hint&&<p style={{fontSize:11,color:"var(--muted)",marginTop:3}}>{hint}</p>}
+  </div>);
+}
+function SectionHead({title,right}){
+  return(<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
+    <h2 style={{fontWeight:700,fontSize:16}}>{title}</h2>
+    {right}
+  </div>);
+}
+function Empty({msg}){return<div style={{padding:"40px 20px",textAlign:"center",color:"var(--muted)",fontSize:13}}>{msg}</div>;}
+function Avatar({name,size=40,bg="teal"}){
+  const bgs={teal:"var(--tl)",purple:"var(--pl)",blue:"var(--bl)",amber:"var(--al)"};
+  const cs={teal:"var(--td)",purple:"var(--purple)",blue:"var(--blue)",amber:"var(--ad)"};
+  const init=name.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
+  return<div style={{width:size,height:size,borderRadius:"50%",background:bgs[bg]||bgs.teal,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:size*.35,color:cs[bg]||cs.teal,flexShrink:0}}>{init}</div>;
+}
+function TH({children}){return<th style={{padding:"9px 12px",textAlign:"left",fontWeight:600,color:"var(--muted)",fontSize:11,borderBottom:"1px solid var(--border)",background:"var(--bg2)",whiteSpace:"nowrap"}}>{children}</th>;}
+function TD({children,s={}}){return<td style={{padding:"9px 12px",borderBottom:"1px solid var(--border)",...s}}>{children}</td>;}
+function TblWrap({children}){return<div className="tbl-wrap"><table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:460}}>{children}</table></div>;}
+function Loading(){return<div style={{display:"flex",justifyContent:"center",padding:40}}><div className="spin"/></div>;}
+
+/* ══════════════════════════════════════════
+   LOGIN
+══════════════════════════════════════════ */
+function LoginModal({onLogin,onClose}){
+  const[u,su]=useState("");const[p,sp]=useState("");
+  const[err,se]=useState("");const[loading,sl]=useState(false);const[show,ss]=useState(false);
+  async function submit(){
+    if(!u||!p){se("Enter username and password");return;}
+    sl(true);se("");
+    try{const d=await api("POST","/api/auth/login",{username:u,password:p});onLogin(d.user);}
+    catch(e){se(e.message);}finally{sl(false);}
+  }
+  return(<Modal title="🏠 Login — Aashiyana Homes" onClose={onClose}>
+    <Field label="Username"><input value={u} onChange={e=>su(e.target.value)} placeholder="admin"/></Field>
+    <Field label="Password">
+      <div style={{position:"relative"}}>
+        <input type={show?"text":"password"} value={p} onChange={e=>sp(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="••••••••" style={{paddingRight:44}}/>
+        <button onClick={()=>ss(!show)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"var(--muted)",fontSize:12,cursor:"pointer"}}>{show?"Hide":"Show"}</button>
+      </div>
+    </Field>
+    {err&&<p style={{color:"var(--red)",fontSize:12,marginBottom:10,padding:"8px 12px",background:"var(--rl)",borderRadius:6}}>{err}</p>}
+    <Btn color="teal" onClick={submit} disabled={loading} style={{width:"100%",marginBottom:10}} size="lg">{loading?"Logging in…":"Login"}</Btn>
+    <div style={{background:"var(--bg2)",borderRadius:8,padding:"10px 12px",fontSize:12,color:"var(--muted)"}}>
+      <strong>Default accounts:</strong><br/>admin / aashiyana@123 (Admin)<br/>secretary / sec@123 (Editor)
+    </div>
+  </Modal>);
+}
+
+/* ══════════════════════════════════════════
+   DASHBOARD
+══════════════════════════════════════════ */
+function Dashboard({cu}){
+  const[data,sd]=useState(null);const[loading,sl]=useState(true);
+  useEffect(()=>{api("GET","/api/dashboard").then(sd).catch(e=>{console.error(e);}).finally(()=>sl(false));},[]);
+  if(loading)return<Loading/>;
+  if(!data)return<Empty msg="Failed to load dashboard"/>;
+  const{totalMembers,staffCount,totalBalance,monthCollected,monthPayments,monthPending,totalExpenses,currentMonth,currentYear,recentCollections,recentExpenses}=data;
+  const isAdmin=cu?.role==="admin";
+  return(<div className="fade">
+    <h2 style={{marginBottom:20,fontSize:24,fontWeight:700}}>Dashboard</h2>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:14,marginBottom:24}}>
+      <Card style={{background:"linear-gradient(135deg,var(--tl),rgba(29,158,117,0.05))",border:"1px solid var(--teal)"}}>
+        <div style={{fontSize:12,fontWeight:600,color:"var(--muted)",marginBottom:8}}>Total Members</div>
+        <div style={{fontSize:32,fontWeight:700,color:"var(--teal)"}}>🏠 {totalMembers}</div>
+        <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>Residents</div>
+      </Card>
+      <Card style={{background:"linear-gradient(135deg,var(--bl),rgba(24,95,165,0.05))",border:"1px solid var(--blue)"}}>
+        <div style={{fontSize:12,fontWeight:600,color:"var(--muted)",marginBottom:8}}>Staff Members</div>
+        <div style={{fontSize:32,fontWeight:700,color:"var(--blue)"}}>👥 {staffCount}</div>
+        <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>Employees</div>
+      </Card>
+      <Card style={{background:"linear-gradient(135deg,var(--gl),rgba(59,109,17,0.05))",border:"1px solid var(--green)"}}>
+        <div style={{fontSize:12,fontWeight:600,color:"var(--muted)",marginBottom:8}}>This Month Collected</div>
+        <div style={{fontSize:32,fontWeight:700,color:"var(--green)"}}>₹ {fmt(monthCollected)}</div>
+        <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>{monthPayments}/{totalMembers} flats</div>
+      </Card>
+      <Card style={{background:"linear-gradient(135deg,var(--rl),rgba(163,45,45,0.05))",border:"1px solid var(--red)"}}>
+        <div style={{fontSize:12,fontWeight:600,color:"var(--muted)",marginBottom:8}}>Total Expenses</div>
+        <div style={{fontSize:32,fontWeight:700,color:"var(--red)"}}>₹ {fmt(totalExpenses)}</div>
+        <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>All-time</div>
+      </Card>
+    </div>
+
+    <div style={{display:"grid",gridTemplateColumns:window.innerWidth>768?"1fr 1fr":"1fr",gap:14,marginBottom:24}}>
+      <Card>
+        <div style={{fontWeight:700,fontSize:14,color:"var(--text)",marginBottom:14}}>Recent Payments ({recentCollections.length})</div>
+        {recentCollections.length===0?<Empty msg="No payments yet"/>:
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {recentCollections.map(c=>(
+              <div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"10px",borderRadius:8,background:"var(--bg2)"}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:600,color:"var(--teal)"}}>{c.flat_no} <span style={{fontWeight:400,color:"var(--text)"}}>{c.member_name}</span></div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>{MS[c.month]} {c.year} · {c.by_name||"Admin"}</div>
+                </div>
+                <Badge c="green" style={{whiteSpace:"nowrap"}}>₹ {fmt(c.amount)}</Badge>
+              </div>
+            ))}
+          </div>
+        }
+      </Card>
+
+      <Card>
+        <div style={{fontWeight:700,fontSize:14,color:"var(--text)",marginBottom:14}}>Recent Expenses ({recentExpenses.length})</div>
+        {recentExpenses.length===0?<Empty msg="No expenses yet"/>:
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {recentExpenses.map(e=>(
+              <div key={e.id} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"10px",borderRadius:8,background:"var(--bg2)"}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:600}}>{e.description}</div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>{e.category} · {e.added_by||"Admin"}</div>
+                </div>
+                <Badge c="red" style={{whiteSpace:"nowrap"}}>₹ {fmt(e.amount)}</Badge>
+              </div>
+            ))}
+          </div>
+        }
+      </Card>
+    </div>
+
+    {isAdmin&&<Card>
+      <div style={{fontWeight:700,fontSize:14,color:"var(--text)",marginBottom:12}}>Quick Stats</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+        <div style={{padding:10,borderRadius:8,background:"var(--bg2)",textAlign:"center"}}>
+          <div style={{fontSize:12,color:"var(--muted)"}}>Month Pending</div>
+          <div style={{fontSize:24,fontWeight:700,color:"var(--amber)",marginTop:4}}>{monthPending}</div>
+        </div>
+        <div style={{padding:10,borderRadius:8,background:"var(--bg2)",textAlign:"center"}}>
+          <div style={{fontSize:12,color:"var(--muted)"}}>Total Balance</div>
+          <div style={{fontSize:24,fontWeight:700,color:"var(--teal)",marginTop:4}}>₹ {fmt(totalBalance)}</div>
+        </div>
+        <div style={{padding:10,borderRadius:8,background:"var(--bg2)",textAlign:"center"}}>
+          <div style={{fontSize:12,color:"var(--muted)"}}>Avg/Member</div>
+          <div style={{fontSize:24,fontWeight:700,color:"var(--blue)",marginTop:4}}>₹ {fmt(monthCollected>0?Math.round(monthCollected/monthPayments):0)}</div>
+        </div>
+      </div>
+    </Card>}
+  </div>);
+}
+
+/* ══════════════════════════════════════════
+   MEMBERS
+══════════════════════════════════════════ */
+function Members({cu}){
+  const[members,sm]=useState([]);const[loading,sl]=useState(true);
+  const[modal,mm]=useState(null);const[form,sf]=useState({flat:"",name:"",phone:"",type:"owner",email:""});
+  const[search,ss]=useState("");const[saving,sv]=useState(false);
+  const isAdmin=cu?.role==="admin";const canEdit=!!cu;
+  const load=useCallback(()=>{sl(true);api("GET","/api/members").then(sm).catch(()=>{}).finally(()=>sl(false));},[]);
+  useEffect(()=>load(),[load]);
+  const filtered=members.filter(m=>m.flat.toLowerCase().includes(search.toLowerCase())||m.name.toLowerCase().includes(search.toLowerCase()));
+  async function save(){
+    if(!form.flat||!form.name){toast("Flat and name required","err");return;}
+    sv(true);
+    try{
+      if(modal==="add") await api("POST","/api/members",form);
+      else await api("PUT","/api/members/"+form.id,form);
+      toast(modal==="add"?"Resident added!":"Resident updated!");load();mm(null);
+    }catch(e){toast(e.message,"err");}finally{sv(false);}
+  }
+  async function del(m){
+    if(!confirm(`Remove ${m.name} (${m.flat})?`))return;
+    try{await api("DELETE","/api/members/"+m.id);toast("Resident removed","info");load();}
+    catch(e){toast(e.message,"err");}
+  }
+  if(loading)return<Loading/>;
+  return(<div className="fade">
+    <SectionHead title={`Residents (${members.length})`} right={<div style={{display:"flex",gap:8}}>
+      <input value={search} onChange={e=>ss(e.target.value)} placeholder="Search…" style={{width:170}}/>
+      {canEdit&&<Btn color="teal" onClick={()=>{sf({flat:"",name:"",phone:"",type:"owner",email:""});mm("add");}}>+ Add</Btn>}
+    </div>}/>
+    <Card style={{padding:0,overflow:"hidden"}}>
+      <TblWrap><thead><tr><TH>Flat</TH><TH>Name</TH><TH>Phone</TH><TH>Email</TH><TH>Type</TH>{canEdit&&<TH>Actions</TH>}</tr></thead>
+        <tbody>{filtered.length===0?<tr><td colSpan={6}><Empty msg="No residents found"/></td></tr>:
+        filtered.map(m=><tr key={m.id}>
+          <TD><strong style={{color:"var(--teal)"}}>{m.flat}</strong></TD>
+          <TD>{m.name}</TD><TD s={{color:"var(--muted)"}}>{m.phone||"—"}</TD>
+          <TD s={{color:"var(--muted)",fontSize:12}}>{m.email||"—"}</TD>
+          <TD><Badge c={m.type==="owner"?"blue":"amber"}>{m.type}</Badge></TD>
+          {canEdit&&<TD><div style={{display:"flex",gap:5}}>
+            <Btn color="gray" size="sm" onClick={()=>{sf({...m,email:m.email||""});mm("edit");}}>Edit</Btn>
+            {isAdmin&&<Btn color="red" size="sm" onClick={()=>del(m)}>Remove</Btn>}
+          </div></TD>}
+        </tr>)}</tbody>
+      </TblWrap>
+    </Card>
+    {modal&&<Modal title={modal==="add"?"Add Resident":"Edit Resident"} onClose={()=>mm(null)}>
+      <Field label="Flat Number"><input value={form.flat} onChange={e=>sf({...form,flat:e.target.value})} placeholder="A-101"/></Field>
+      <Field label="Full Name"><input value={form.name} onChange={e=>sf({...form,name:e.target.value})} placeholder="Resident name"/></Field>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <Field label="Phone"><input value={form.phone||""} onChange={e=>sf({...form,phone:e.target.value})} placeholder="10-digit"/></Field>
+        <Field label="Email"><input type="email" value={form.email||""} onChange={e=>sf({...form,email:e.target.value})} placeholder="optional"/></Field>
+      </div>
+      <Field label="Type"><select value={form.type} onChange={e=>sf({...form,type:e.target.value})}><option value="owner">Owner</option><option value="tenant">Tenant</option></select></Field>
+      <div style={{display:"flex",gap:8,marginTop:4}}>
+        <Btn color="teal" onClick={save} disabled={saving} style={{flex:1}}>{saving?"Saving…":"Save Resident"}</Btn>
+        <Btn color="gray" onClick={()=>mm(null)} style={{flex:1}}>Cancel</Btn>
+      </div>
+    </Modal>}
+  </div>);
+}
+
+/* ══════════════════════════════════════════
+   FUND COLLECTION
+══════════════════════════════════════════ */
+function FundCollection({cu,settings}){
+  const now=new Date();
+  const[members,smem]=useState([]);
+  const[collections,sc]=useState([]);
+  const[loading,sl]=useState(true);
+  const[modal,mm]=useState(false);
+  const[fm,sfm]=useState(now.getMonth());
+  const[fy,sfy]=useState(now.getFullYear());
+  const[saving,sv]=useState(false);
+  const[form,sf]=useState({member_id:"",flat_no:"",member_name:"",phone:"",month:now.getMonth(),year:now.getFullYear(),amount:Number(settings?.maintenance_amount)||1500,date:today(),note:""});
+  const canEdit=!!cu;
+
+  async function load(){
+    sl(true);
+    try{
+      const[m,c]=await Promise.all([api("GET","/api/members"),api("GET",`/api/collections?month=${fm}&year=${fy}`)]);
+      smem(m);sc(c);
+    }catch{}finally{sl(false);}
+  }
+  useEffect(()=>{load();},[fm,fy]);
+
+  const paidIds=collections.map(c=>c.member_id);
+  const total=collections.reduce((s,c)=>s+Number(c.amount),0);
+
+  function pickMember(id){
+    const m=members.find(x=>x.id===id);
+    if(m) sf(f=>({...f,member_id:id,flat_no:m.flat,member_name:m.name,phone:m.phone||""}));
+  }
+  async function save(){
+    if(!form.member_id||!form.amount){toast("Select member and enter amount","err");return;}
+    sv(true);
+    try{await api("POST","/api/collections",form);toast(`Payment recorded for ${form.flat_no}!`);load();mm(false);}
+    catch(e){toast(e.message,"err");}finally{sv(false);}
+  }
+  async function del(c){
+    if(!confirm("Delete this payment?"))return;
+    try{await api("DELETE","/api/collections/"+c.id);toast("Deleted","info");load();}catch(e){toast(e.message,"err");}
+  }
+
+  if(loading)return<Loading/>;
+  return(<div className="fade">
+    <SectionHead title="Fund Collection" right={<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+      <select style={{width:"auto"}} value={fm} onChange={e=>sfm(Number(e.target.value))}>{MN.map((m,i)=><option key={i} value={i}>{m}</option>)}</select>
+      <select style={{width:"auto"}} value={fy} onChange={e=>sfy(Number(e.target.value))}>{YEARS.map(y=><option key={y}>{y}</option>)}</select>
+      {canEdit&&<Btn color="teal" onClick={()=>{sf({member_id:"",flat_no:"",member_name:"",phone:"",month:fm,year:fy,amount:Number(settings?.maintenance_amount)||1500,date:today(),note:""});mm(true);}}>+ Record Payment</Btn>}
+    </div>}/>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:10,marginBottom:14}}>
+      <Stat label="Collected" val={fmt(total)} color="green"/>
+      <Stat label="Paid Flats" val={`${collections.length}/${members.length}`} color="teal"/>
+      <Stat label="Pending" val={members.length-collections.length} color={members.length-collections.length>0?"amber":"green"}/>
+    </div>
+    <Card style={{padding:0,overflow:"hidden"}}>
+      <TblWrap><thead><tr><TH>Flat</TH><TH>Resident</TH><TH>Amount</TH><TH>Date</TH><TH>By</TH><TH>Note</TH>{canEdit&&<TH></TH>}</tr></thead>
+        <tbody>{collections.length===0?<tr><td colSpan={7}><Empty msg={`No collections for ${MN[fm]} ${fy}`}/></td></tr>:
+        collections.map(c=><tr key={c.id}>
+          <TD><strong style={{color:"var(--teal)"}}>{c.flat_no}</strong></TD>
+          <TD>{c.member_name}</TD>
+          <TD><Badge c="green">{fmt(c.amount)}</Badge></TD>
+          <TD s={{color:"var(--muted)"}}>{c.date}</TD>
+          <TD s={{color:"var(--muted)",fontSize:12}}>{c.by_name||"—"}</TD>
+          <TD s={{color:"var(--muted)",fontSize:12}}>{c.note||"—"}</TD>
+          {canEdit&&<TD><Btn color="red" size="sm" onClick={()=>del(c)}>Del</Btn></TD>}
+        </tr>)}</tbody>
+      </TblWrap>
+    </Card>
+    {modal&&<Modal title="Record Payment" onClose={()=>mm(false)}>
+      <Field label="Select Resident">
+        <select value={form.member_id} onChange={e=>pickMember(e.target.value)}>
+          <option value="">— Choose Flat —</option>
+          {members.filter(m=>!paidIds.includes(m.id)).sort((a,b)=>a.flat.localeCompare(b.flat)).map(m=><option key={m.id} value={m.id}>{m.flat} – {m.name}</option>)}
+        </select>
+      </Field>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <Field label="Month"><select value={form.month} onChange={e=>sf({...form,month:Number(e.target.value)})}>{MN.map((m,i)=><option key={i} value={i}>{m}</option>)}</select></Field>
+        <Field label="Year"><select value={form.year} onChange={e=>sf({...form,year:Number(e.target.value)})}>{YEARS.map(y=><option key={y}>{y}</option>)}</select></Field>
+      </div>
+      <Field label="Amount (₹)"><input type="number" value={form.amount} onChange={e=>sf({...form,amount:e.target.value})}/></Field>
+      <Field label="Payment Date"><input type="date" value={form.date} onChange={e=>sf({...form,date:e.target.value})}/></Field>
+      <Field label="Note / Mode"><input value={form.note} onChange={e=>sf({...form,note:e.target.value})} placeholder="Cash / UPI / NEFT…"/></Field>
+      <div style={{display:"flex",gap:8,marginTop:4}}>
+        <Btn color="teal" onClick={save} disabled={saving} style={{flex:1}}>{saving?"Saving…":"Save Payment"}</Btn>
+        <Btn color="gray" onClick={()=>mm(false)} style={{flex:1}}>Cancel</Btn>
+      </div>
+    </Modal>}
+  </div>);
+}
+
+/* ══════════════════════════════════════════
+   EXPENSES
+══════════════════════════════════════════ */
+function Expenses({cu}){
+  const now=new Date();
+  const[expenses,se]=useState([]);const[loading,sl]=useState(true);
+  const[modal,mm]=useState(false);const[form,sf]=useState({category:"Cleaning",description:"",amount:"",date:today(),note:""});
+  const[fy,sfy]=useState(now.getFullYear());const[cat,sc]=useState("All");const[saving,sv]=useState(false);
+  const canEdit=!!cu;
+
+  const load=useCallback(()=>{
+    sl(true);
+    const params=new URLSearchParams({year:fy});
+    if(cat!=="All") params.set("category",cat);
+    api("GET","/api/expenses?"+params).then(se).catch(()=>{}).finally(()=>sl(false));
+  },[fy,cat]);
+  useEffect(()=>load(),[load]);
+
+  const total=expenses.reduce((s,e)=>s+Number(e.amount),0);
+  async function save(){
+    if(!form.description||!form.amount){toast("Description and amount required","err");return;}
+    sv(true);
+    try{await api("POST","/api/expenses",form);toast("Expense added!");load();mm(false);}
+    catch(e){toast(e.message,"err");}finally{sv(false);}
+  }
+  async function del(e){
+    if(!confirm("Delete this expense?"))return;
+    try{await api("DELETE","/api/expenses/"+e.id);toast("Deleted","info");load();}catch(err){toast(err.message,"err");}
+  }
+  if(loading)return<Loading/>;
+  return(<div className="fade">
+    <SectionHead title="Expenses" right={<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+      <select style={{width:"auto"}} value={fy} onChange={e=>sfy(Number(e.target.value))}>{YEARS.map(y=><option key={y}>{y}</option>)}</select>
+      <select style={{width:"auto"}} value={cat} onChange={e=>sc(e.target.value)}><option>All</option>{CATS.map(c=><option key={c}>{c}</option>)}</select>
+      {canEdit&&<Btn color="red" onClick={()=>{sf({category:"Cleaning",description:"",amount:"",date:today(),note:""});mm(true);}}>+ Add Expense</Btn>}
+    </div>}/>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:10,marginBottom:14}}>
+      <Stat label={`Total ${fy}`} val={fmt(total)} color="red"/>
+      {CATS.map(c=>{const t=expenses.filter(e=>e.category===c).reduce((s,e)=>s+Number(e.amount),0);return t>0?<Stat key={c} label={c} val={fmt(t)} color="amber"/>:null}).filter(Boolean).slice(0,3)}
+    </div>
+    <Card style={{padding:0,overflow:"hidden"}}>
+      <TblWrap><thead><tr><TH>Date</TH><TH>Category</TH><TH>Description</TH><TH>Amount</TH><TH>Added By</TH>{canEdit&&<TH></TH>}</tr></thead>
+        <tbody>{expenses.length===0?<tr><td colSpan={6}><Empty msg={`No expenses for ${fy}`}/></td></tr>:
+        expenses.map(e=><tr key={e.id}>
+          <TD s={{color:"var(--muted)"}}>{e.date}</TD>
+          <TD><Badge c="amber">{e.category}</Badge></TD>
+          <TD><strong>{e.description}</strong>{e.note&&<span style={{fontSize:11,color:"var(--muted)"}}> · {e.note}</span>}</TD>
+          <TD><Badge c="red">{fmt(e.amount)}</Badge></TD>
+          <TD s={{color:"var(--muted)",fontSize:12}}>{e.added_by||"—"}</TD>
+          {canEdit&&<TD><Btn color="red" size="sm" onClick={()=>del(e)}>Del</Btn></TD>}
+        </tr>)}</tbody>
+      </TblWrap>
+    </Card>
+    {modal&&<Modal title="Add Expense" onClose={()=>mm(false)}>
+      <Field label="Category"><select value={form.category} onChange={e=>sf({...form,category:e.target.value})}>{CATS.map(c=><option key={c}>{c}</option>)}</select></Field>
+      <Field label="Description"><input value={form.description} onChange={e=>sf({...form,description:e.target.value})} placeholder="e.g. Monthly cleaning"/></Field>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <Field label="Amount (₹)"><input type="number" value={form.amount} onChange={e=>sf({...form,amount:e.target.value})}/></Field>
+        <Field label="Date"><input type="date" value={form.date} onChange={e=>sf({...form,date:e.target.value})}/></Field>
+      </div>
+      <Field label="Note"><input value={form.note} onChange={e=>sf({...form,note:e.target.value})} placeholder="Additional info…"/></Field>
+      <div style={{display:"flex",gap:8,marginTop:4}}>
+        <Btn color="red" onClick={save} disabled={saving} style={{flex:1}}>{saving?"Saving…":"Save Expense"}</Btn>
+        <Btn color="gray" onClick={()=>mm(false)} style={{flex:1}}>Cancel</Btn>
+      </div>
+    </Modal>}
+  </div>);
+}
+
+/* ══════════════════════════════════════════
+   OUTSTANDING
+══════════════════════════════════════════ */
+function Outstanding({settings}){
+  const now=new Date();
+  const[members,sm]=useState([]);const[collections,sc]=useState([]);const[loading,sl]=useState(true);
+  const[fm,sfm]=useState(now.getMonth());const[fy,sfy]=useState(now.getFullYear());
+  const amt=Number(settings?.maintenance_amount)||1500;
+  async function load(){
+    sl(true);
+    try{const[m,c]=await Promise.all([api("GET","/api/members"),api("GET",`/api/collections?month=${fm}&year=${fy}`)]);sm(m);sc(c);}
+    catch{}finally{sl(false);}
+  }
+  useEffect(()=>{load();},[fm,fy]);
+  const paidIds=collections.map(c=>c.member_id);
+  const unpaid=members.filter(m=>!paidIds.includes(m.id)).sort((a,b)=>a.flat.localeCompare(b.flat));
+  const paid=members.filter(m=>paidIds.includes(m.id)).sort((a,b)=>a.flat.localeCompare(b.flat));
+  const sName=settings?.society_name||"Aashiyana Homes";
+  if(loading)return<Loading/>;
+  return(<div className="fade">
+    <SectionHead title="Outstanding Report" right={<div style={{display:"flex",gap:8}}>
+      <select style={{width:"auto"}} value={fm} onChange={e=>sfm(Number(e.target.value))}>{MN.map((m,i)=><option key={i} value={i}>{m}</option>)}</select>
+      <select style={{width:"auto"}} value={fy} onChange={e=>sfy(Number(e.target.value))}>{YEARS.map(y=><option key={y}>{y}</option>)}</select>
+    </div>}/>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,marginBottom:14}}>
+      <Stat label="Pending" val={unpaid.length} color={unpaid.length>0?"amber":"green"}/>
+      <Stat label="Paid" val={`${paid.length}/${members.length}`} color="teal"/>
+      <Stat label="Amount Due" val={fmt(unpaid.length*amt)} color="red"/>
+      <Stat label="Amount Collected" val={fmt(paid.length*amt)} color="green"/>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+      <div>
+        <div style={{fontWeight:700,fontSize:13,color:"var(--red)",marginBottom:8}}>Pending ({unpaid.length})</div>
+        <Card style={{padding:0,overflow:"hidden"}}>
+          {unpaid.length===0?<div style={{padding:24,textAlign:"center",color:"var(--muted)",fontSize:13}}>🎉 All paid for {MN[fm]}!</div>:
+          unpaid.map(m=><div key={m.id} style={{padding:"12px 14px",borderBottom:"1px solid var(--border)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <div><span style={{fontWeight:700,color:"var(--teal)",fontSize:13}}>{m.flat}</span><span style={{marginLeft:6,fontSize:13}}>{m.name}</span></div>
+              <Badge c="red">{fmt(amt)}</Badge>
+            </div>
+            {m.phone&&<a href={waLink(m.phone,m.name,m.flat,fm,fy,amt,sName)} target="_blank" rel="noopener noreferrer"
+              style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,color:"#128c7e",fontWeight:600,padding:"4px 12px",borderRadius:20,background:"#e8f5e9",textDecoration:"none"}}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.096.536 4.07 1.476 5.791L0 24l6.366-1.473A12 12 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22a9.96 9.96 0 01-5.17-1.4l-.37-.22-3.78.874.94-3.67-.24-.38A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+              Send WhatsApp Reminder
+            </a>}
+          </div>)}
+        </Card>
+      </div>
+      <div>
+        <div style={{fontWeight:700,fontSize:13,color:"var(--green)",marginBottom:8}}>Paid ({paid.length})</div>
+        <Card style={{padding:0,overflow:"hidden"}}>
+          {paid.length===0?<div style={{padding:24,textAlign:"center",color:"var(--muted)",fontSize:13}}>No payments recorded yet</div>:
+          paid.map(m=><div key={m.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderBottom:"1px solid var(--border)"}}>
+            <div><span style={{fontWeight:700,color:"var(--teal)",fontSize:13}}>{m.flat}</span><span style={{marginLeft:6,fontSize:13}}>{m.name}</span></div>
+            <Badge c="green">Paid</Badge>
+          </div>)}
+        </Card>
+      </div>
+    </div>
+  </div>);
+}
+
+/* ══════════════════════════════════════════
+   STAFF
+══════════════════════════════════════════ */
+function Staff({cu}){
+  const[staff,ss]=useState([]);const[loading,sl]=useState(true);
+  const[modal,mm]=useState(null);const[form,sf]=useState({name:"",role:"Security Guard",salary:"",phone:"",join_date:today()});
+  const[saving,sv]=useState(false);const canEdit=!!cu;const isAdmin=cu?.role==="admin";
+  const load=useCallback(()=>{sl(true);api("GET","/api/staff").then(ss).catch(()=>{}).finally(()=>sl(false));},[]);
+  useEffect(()=>load(),[load]);
+  async function save(){
+    if(!form.name){toast("Name required","err");return;}
+    sv(true);
+    try{
+      if(modal==="add") await api("POST","/api/staff",form);
+      else await api("PUT","/api/staff/"+form.id,form);
+      toast(modal==="add"?"Staff added!":"Staff updated!");load();mm(null);
+    }catch(e){toast(e.message,"err");}finally{sv(false);}
+  }
+  async function del(s){
+    if(!confirm(`Remove ${s.name}?`))return;
+    try{await api("DELETE","/api/staff/"+s.id);toast("Staff removed","info");load();}catch(e){toast(e.message,"err");}
+  }
+  if(loading)return<Loading/>;
+  return(<div className="fade">
+    <SectionHead title={`Staff (${staff.length})`} right={canEdit&&<Btn color="teal" onClick={()=>{sf({name:"",role:"Security Guard",salary:"",phone:"",join_date:today()});mm("add");}}>+ Add Staff</Btn>}/>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:14}}>
+      {staff.map(s=><Card key={s.id}>
+        <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:12}}><Avatar name={s.name} size={44} bg="teal"/>
+          <div><div style={{fontWeight:700,fontSize:14}}>{s.name}</div><Badge c="blue">{s.role}</Badge></div>
+        </div>
+        <div style={{fontSize:13,borderTop:"1px solid var(--border)",paddingTop:10}}>
+          {[["Phone",s.phone||"—"],["Salary",fmt(s.salary)+"/mo"],["Joined",s.join_date||"—"]].map(([k,v])=>(
+            <div key={k} style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+              <span style={{color:"var(--muted)"}}>{k}</span>
+              <span style={{fontWeight:500,color:k==="Salary"?"var(--green)":"var(--text)"}}>{v}</span>
+            </div>
+          ))}
+          {canEdit&&<div style={{display:"flex",gap:6,marginTop:8}}>
+            <Btn color="gray" size="sm" onClick={()=>{sf({...s,join_date:s.join_date||today()});mm("edit");}} style={{flex:1}}>Edit</Btn>
+            {isAdmin&&<Btn color="red" size="sm" onClick={()=>del(s)} style={{flex:1}}>Remove</Btn>}
+          </div>}
+        </div>
+      </Card>)}
+      {staff.length===0&&<p style={{fontSize:13,color:"var(--muted)"}}>No staff added yet.</p>}
+    </div>
+    {modal&&<Modal title={modal==="add"?"Add Staff":"Edit Staff"} onClose={()=>mm(null)}>
+      <Field label="Full Name"><input value={form.name} onChange={e=>sf({...form,name:e.target.value})} placeholder="Staff name"/></Field>
+      <Field label="Role"><select value={form.role} onChange={e=>sf({...form,role:e.target.value})}>{STAFF_ROLES.map(r=><option key={r}>{r}</option>)}</select></Field>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <Field label="Phone"><input value={form.phone||""} onChange={e=>sf({...form,phone:e.target.value})} placeholder="Mobile"/></Field>
+        <Field label="Salary (₹)"><input type="number" value={form.salary||""} onChange={e=>sf({...form,salary:e.target.value})}/></Field>
+      </div>
+      <Field label="Joining Date"><input type="date" value={form.join_date||today()} onChange={e=>sf({...form,join_date:e.target.value})}/></Field>
+      <div style={{display:"flex",gap:8,marginTop:4}}>
+        <Btn color="teal" onClick={save} disabled={saving} style={{flex:1}}>{saving?"Saving…":"Save"}</Btn>
+        <Btn color="gray" onClick={()=>mm(null)} style={{flex:1}}>Cancel</Btn>
+      </div>
+    </Modal>}
+  </div>);
+}
+
+/* ══════════════════════════════════════════
+   REPORTS / PDF
+══════════════════════════════════════════ */
+function Reports({settings}){
+  const now=new Date();
+  const[fm,sfm]=useState(now.getMonth());const[fy,sfy]=useState(now.getFullYear());
+  const[members,sm]=useState([]);const[collections,sc]=useState([]);const[expenses,se]=useState([]);
+  const[loading,sl]=useState(true);
+  useEffect(()=>{
+    sl(true);
+    Promise.all([api("GET","/api/members"),api("GET","/api/collections"),api("GET","/api/expenses")])
+      .then(([m,c,e])=>{sm(m);sc(c);se(e);}).catch(()=>{}).finally(()=>sl(false));
+  },[]);
+  const sName=settings?.society_name||"Aashiyana Homes";
+  if(loading)return<Loading/>;
+  return(<div className="fade">
+    <SectionHead title="Reports & PDF Export"/>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:14}}>
+      <Card>
+        <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>📄 Monthly Report</div>
+        <p style={{fontSize:12,color:"var(--muted)",marginBottom:14}}>Collections, outstanding & expenses for one month. Includes summary page.</p>
+        <Field label="Month"><select value={fm} onChange={e=>sfm(Number(e.target.value))}>{MN.map((m,i)=><option key={i} value={i}>{m}</option>)}</select></Field>
+        <Field label="Year"><select value={fy} onChange={e=>sfy(Number(e.target.value))}>{YEARS.map(y=><option key={y}>{y}</option>)}</select></Field>
+        <Btn color="teal" onClick={()=>exportMonthlyPDF(members,collections,expenses,fm,fy,sName)} style={{width:"100%",marginTop:4}}>Download Monthly PDF</Btn>
+      </Card>
+      <Card>
+        <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>📊 Annual Summary</div>
+        <p style={{fontSize:12,color:"var(--muted)",marginBottom:14}}>Full year month-by-month breakdown of collection vs expenses with net balance.</p>
+        <Field label="Year"><select value={fy} onChange={e=>sfy(Number(e.target.value))}>{YEARS.map(y=><option key={y}>{y}</option>)}</select></Field>
+        <Btn color="green" onClick={()=>exportAnnualPDF(members,collections,expenses,fy,sName)} style={{width:"100%",marginTop:4}}>Download Annual PDF</Btn>
+      </Card>
+    </div>
+  </div>);
+}
+
+/* ══════════════════════════════════════════
+   USERS (admin)
+══════════════════════════════════════════ */
+function Users({cu}){
+  const[users,su]=useState([]);const[loading,sl]=useState(true);
+  const[modal,mm]=useState(null);const[form,sf]=useState({username:"",password:"",name:"",role:"editor"});
+  const[saving,sv]=useState(false);
+  const load=useCallback(()=>{sl(true);api("GET","/api/users").then(su).catch(()=>{}).finally(()=>sl(false));},[]);
+  useEffect(()=>load(),[load]);
+  async function save(){
+    if(!form.username||!form.name){toast("All fields required","err");return;}
+    if(modal==="add"&&!form.password){toast("Password required","err");return;}
+    sv(true);
+    try{
+      if(modal==="add") await api("POST","/api/users",form);
+      else await api("PUT","/api/users/"+form.id,form);
+      toast(modal==="add"?"User created!":"User updated!");load();mm(null);
+    }catch(e){toast(e.message,"err");}finally{sv(false);}
+  }
+  async function del(u){
+    if(!confirm(`Remove ${u.name}?`))return;
+    try{await api("DELETE","/api/users/"+u.id);toast("User removed","info");load();}catch(e){toast(e.message,"err");}
+  }
+  if(loading)return<Loading/>;
+  return(<div className="fade">
+    <SectionHead title={`User Accounts (${users.length})`} right={<Btn color="teal" onClick={()=>{sf({username:"",password:"",name:"",role:"editor"});mm("add");}}>+ Add User</Btn>}/>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:14}}>
+      {users.map(u=><Card key={u.id}>
+        <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:12}}><Avatar name={u.name} size={44} bg="purple"/>
+          <div><div style={{fontWeight:700,fontSize:14}}>{u.name}</div><div style={{fontSize:12,color:"var(--muted)"}}>@{u.username}</div></div>
+        </div>
+        <div style={{marginBottom:10}}><Badge c={u.role==="admin"?"red":"blue"}>{u.role==="admin"?"Admin – Full Access":"Editor – Add/Edit"}</Badge></div>
+        <div style={{fontSize:11,color:"var(--muted)",marginBottom:10}}>Created: {u.created_at?.slice(0,10)||"—"}</div>
+        <div style={{display:"flex",gap:6}}>
+          <Btn color="gray" size="sm" onClick={()=>{sf({...u,password:""});mm("edit");}} style={{flex:1}}>Edit</Btn>
+          <Btn color="red" size="sm" onClick={()=>del(u)} style={{flex:1}}>Remove</Btn>
+        </div>
+      </Card>)}
+    </div>
+    {modal&&<Modal title={modal==="add"?"Create User":"Edit User"} onClose={()=>mm(null)}>
+      <Field label="Full Name"><input value={form.name} onChange={e=>sf({...form,name:e.target.value})} placeholder="Full name"/></Field>
+      <Field label="Username"><input value={form.username} onChange={e=>sf({...form,username:e.target.value})} placeholder="Login username" disabled={modal==="edit"}/></Field>
+      <Field label={modal==="edit"?"New Password (leave blank to keep)":"Password"}>
+        <input type="password" value={form.password||""} onChange={e=>sf({...form,password:e.target.value})} placeholder={modal==="edit"?"Leave blank to keep current":"••••••••"}/>
+      </Field>
+      <Field label="Role">
+        <select value={form.role} onChange={e=>sf({...form,role:e.target.value})}>
+          <option value="admin">Admin – Full access (add, edit, delete)</option>
+          <option value="editor">Editor – Add & edit only, no delete</option>
+        </select>
+      </Field>
+      <div style={{display:"flex",gap:8,marginTop:4}}>
+        <Btn color="teal" onClick={save} disabled={saving} style={{flex:1}}>{saving?"Saving…":"Save User"}</Btn>
+        <Btn color="gray" onClick={()=>mm(null)} style={{flex:1}}>Cancel</Btn>
+      </div>
+    </Modal>}
+  </div>);
+}
+
+/* ══════════════════════════════════════════
+   AUDIT LOG
+══════════════════════════════════════════ */
+function AuditLog(){
+  const[logs,sl]=useState([]);const[loading,ll]=useState(true);const[search,ss]=useState("");
+  const load=useCallback(()=>{
+    ll(true);
+    const p=search?`?search=${encodeURIComponent(search)}`:"";
+    api("GET","/api/logs"+p).then(sl).catch(()=>{}).finally(()=>ll(false));
+  },[search]);
+  useEffect(()=>{const t=setTimeout(load,300);return()=>clearTimeout(t);},[load]);
+  return(<div className="fade">
+    <SectionHead title={`Audit Log (${logs.length} entries)`} right={<input value={search} onChange={e=>ss(e.target.value)} placeholder="Search actions…" style={{width:190}}/>}/>
+    <Card style={{padding:0,overflow:"hidden"}}>
+      {loading?<Loading/>:logs.length===0?<Empty msg="No activity logged yet"/>:
+      logs.map((l,i)=><div key={l.id} style={{display:"flex",gap:12,alignItems:"flex-start",padding:"11px 14px",borderBottom:i<logs.length-1?"1px solid var(--border)":"none"}}>
+        <Avatar name={l.user_name||"U"} size={32} bg="teal"/>
+        <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500}}>{l.action}</div>
+          <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{l.user_name} · {l.created_at}</div>
+        </div>
+      </div>)}
+    </Card>
+  </div>);
+}
+
+/* ══════════════════════════════════════════
+   SETTINGS
+══════════════════════════════════════════ */
+function Settings({settings,onUpdate}){
+  const[form,sf]=useState({...settings});const[saving,sv]=useState(false);
+  async function save(){
+    sv(true);
+    try{const d=await api("PUT","/api/settings",form);onUpdate(d);toast("Settings saved!");}
+    catch(e){toast(e.message,"err");}finally{sv(false);}
+  }
+  return(<div className="fade">
+    <SectionHead title="Society Settings"/>
+    <Card style={{maxWidth:460}}>
+      <Field label="Society Name"><input value={form.society_name||""} onChange={e=>sf({...form,society_name:e.target.value})}/></Field>
+      <Field label="Monthly Maintenance Amount (₹)"><input type="number" value={form.maintenance_amount||""} onChange={e=>sf({...form,maintenance_amount:e.target.value})}/></Field>
+      <Field label="Late Payment Penalty per Month (₹)"><input type="number" value={form.penalty_per_month||""} onChange={e=>sf({...form,penalty_per_month:e.target.value})}/></Field>
+      <Field label="Society Address"><input value={form.address||""} onChange={e=>sf({...form,address:e.target.value})} placeholder="Full address"/></Field>
+      <Field label="Contact Email"><input type="email" value={form.contact_email||""} onChange={e=>sf({...form,contact_email:e.target.value})} placeholder="society@email.com"/></Field>
+      <Btn color="teal" onClick={save} disabled={saving} style={{marginTop:4}}>{saving?"Saving…":"Save Settings"}</Btn>
+    </Card>
+  </div>);
+}
+
+/* ══════════════════════════════════════════
+   MAIN APP
+══════════════════════════════════════════ */
+function App(){
+  const[cu,scu]=useState(null);
+  const[showLogin,ssl]=useState(false);
+  const[tab,st]=useState("dashboard");
+  const[navOpen,sno]=useState(false);
+  const[dark,sd]=useState(()=>window.matchMedia("(prefers-color-scheme:dark)").matches);
+  const[settings,sts]=useState({society_name:"Aashiyana Homes",maintenance_amount:"1500"});
+  const[authChecked,sac]=useState(false);
+  const[width,sw]=useState(window.innerWidth);
+
+  useEffect(()=>{
+    const h=()=>sw(window.innerWidth);
+    window.addEventListener("resize",h);
+    return()=>window.removeEventListener("resize",h);
+  },[]);
+  const isMobile=width<640;
+
+  useEffect(()=>{document.documentElement.setAttribute("data-theme",dark?"dark":"light");},[dark]);
+
+  useEffect(()=>{
+    Promise.all([api("GET","/api/auth/me"),api("GET","/api/settings")])
+      .then(([{user},s])=>{if(user)scu(user);sts(s);})
+      .catch(()=>{})
+      .finally(()=>sac(true));
+  },[]);
+
+  const isAdmin=cu?.role==="admin";
+  const sName=settings?.society_name||"Aashiyana Homes";
+
+  const TABS=[
+    {id:"dashboard",  label:"Dashboard",      icon:"◈"},
+    {id:"members",    label:"Residents",       icon:"◉"},
+    {id:"funds",      label:"Fund Collection", icon:"◎"},
+    {id:"expenses",   label:"Expenses",        icon:"◐"},
+    {id:"outstanding",label:"Outstanding",     icon:"◑"},
+    {id:"staff",      label:"Staff",           icon:"◒"},
+    {id:"reports",    label:"Reports / PDF",   icon:"◓"},
+    ...(isAdmin?[{id:"users",label:"Users",icon:"◔"},{id:"audit",label:"Audit Log",icon:"◕"},{id:"settings",label:"Settings",icon:"⚙"}]:[]),
+  ];
+
+  async function logout(){
+    try{await api("POST","/api/auth/logout");}catch{}
+    scu(null);st("dashboard");toast("Logged out","info");
+  }
+
+  function gotoTab(t){st(t);sno(false);}
+
+  if(!authChecked){
+    return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",gap:16}}>
+      <div className="spin"/>
+      <span style={{fontSize:13,color:"var(--muted)"}}>Loading {sName}…</span>
+    </div>);
+  }
+
+  return(<div style={{display:"flex",minHeight:"100vh",background:"var(--bg)"}}>
+
+    {/* HEADER */}
+    <header style={{background:"var(--card)",borderBottom:"1px solid var(--border)",padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"fixed",top:0,left:0,right:0,zIndex:200,boxShadow:"var(--shadow)",height:64}}>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        {isMobile&&<button onClick={()=>sno(!navOpen)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"var(--text)",padding:"0 4px"}}>☰</button>}
+        <div>
+          <div style={{fontWeight:800,fontSize:18,color:"var(--teal)"}}>🏠 {sName}</div>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:12,alignItems:"center"}}>
+        <button onClick={()=>sd(!dark)} style={{background:"none",border:"1px solid var(--border)",borderRadius:8,padding:"6px 10px",cursor:"pointer",color:"var(--text)",fontSize:14}}>{dark?"☀":"🌙"}</button>
+        {cu?(<>
+          <div style={{textAlign:"right",fontSize:12}}>
+            <div style={{fontWeight:600,color:"var(--text)"}}>{cu.name}</div>
+            <div style={{color:"var(--muted)",fontSize:11}}>{cu.role}</div>
+          </div>
+          <Btn color="gray" size="sm" onClick={logout}>Logout</Btn>
+        </>):(<Btn color="teal" size="sm" onClick={()=>ssl(true)}>Login</Btn>)}
+      </div>
+    </header>
+
+    {/* SIDEBAR */}
+    <aside style={{
+      position:isMobile?"fixed":"static",
+      left:0,
+      top:64,
+      width:250,
+      background:"var(--card)",
+      borderRight:"1px solid var(--border)",
+      height:isMobile?"calc(100vh - 64px)":"calc(100vh - 64px)",
+      overflowY:"auto",
+      transition:"transform .3s",
+      transform:isMobile&&!navOpen?"translateX(-100%)":"translateX(0)",
+      zIndex:190,
+      paddingTop:16
+    }}>
+      <nav style={{display:"flex",flexDirection:"column",gap:2,padding:"0 8px"}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>gotoTab(t.id)} style={{
+            display:"flex",
+            alignItems:"center",
+            gap:12,
+            padding:"10px 14px",
+            border:"none",
+            background:tab===t.id?"var(--tl)":"transparent",
+            color:tab===t.id?"var(--teal)":"var(--text)",
+            textAlign:"left",
+            fontSize:14,
+            cursor:"pointer",
+            fontWeight:tab===t.id?700:500,
+            borderRadius:8,
+            transition:"all .15s",
+            width:"100%"
+          }}>
+            <span style={{fontSize:18}}>{t.icon}</span>
+            <span>{t.label}</span>
+          </button>
+        ))}
+      </nav>
+    </aside>
+
+    {/* MOBILE BACKDROP */}
+    {isMobile&&navOpen&&(<div onClick={()=>sno(false)} style={{
+      position:"fixed",
+      top:64,
+      left:0,
+      right:0,
+      bottom:0,
+      background:"rgba(0,0,0,0.3)",
+      zIndex:180
+    }}/>)}
+
+    {/* MAIN CONTENT */}
+    <main style={{
+      flex:1,
+      marginTop:64,
+      padding:"20px 16px",
+      maxWidth:isMobile?"100%":"calc(100% - 250px)",
+      marginLeft:isMobile?0:0
+    }}>
+      <div style={{maxWidth:1200,margin:"0 auto"}}>
+        {tab==="dashboard"    && <Dashboard cu={cu}/>}
+        {tab==="members"      && <Members cu={cu}/>}
+        {tab==="funds"        && <FundCollection cu={cu} settings={settings}/>}
+        {tab==="expenses"     && <Expenses cu={cu}/>}
+        {tab==="outstanding"  && <Outstanding settings={settings}/>}
+        {tab==="staff"        && <Staff cu={cu}/>}
+        {tab==="reports"      && <Reports settings={settings}/>}
+        {tab==="users"        && isAdmin && <Users cu={cu}/>}
+        {tab==="audit"        && isAdmin && <AuditLog/>}
+        {tab==="settings"     && isAdmin && <Settings settings={settings} onUpdate={sts}/>}
+      </div>
+    </main>
+
+    {showLogin&&<LoginModal onLogin={u=>{scu(u);ssl(false);toast(`Welcome, ${u.name}!`);}} onClose={()=>ssl(false)}/>}
+  </div>);
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
