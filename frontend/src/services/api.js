@@ -49,6 +49,57 @@ export const quotationsAPI = {
   approve: (id) => api.put(`/quotations/${id}/approve`),
 };
 
+// ===== NEW API ENDPOINTS =====
+
+export const memberAPI = {
+  list: (params) => api.get('/members/list', { params }),
+  create: (data) => api.post('/members/create', data),
+  get: (id) => api.get(`/members/${id}`),
+  update: (id, data) => api.put(`/members/${id}`, data),
+  delete: (id) => api.delete(`/members/${id}`),
+  getByFlat: (flatId) => api.get(`/members/flat/${flatId}/members`),
+  getByStatus: (status) => api.get(`/members/status/${status}/list`),
+};
+
+export const flatAPI = {
+  list: (params) => api.get('/flats/list', { params }),
+  create: (data) => api.post('/flats/create', data),
+  get: (id) => api.get(`/flats/${id}`),
+  update: (id, data) => api.put(`/flats/${id}`, data),
+  delete: (id) => api.delete(`/flats/${id}`),
+  getByBuilding: (building) => api.get(`/flats/building/${building}/list`),
+  getOverview: () => api.get('/flats/summary/overview'),
+};
+
+export const maintenanceAPI = {
+  listCharges: (params) => api.get('/maintenance/charges/list', { params }),
+  createCharge: (data) => api.post('/maintenance/charge/create', data),
+  getCharge: (id) => api.get(`/maintenance/charges/${id}`),
+  markPaid: (id) => api.put(`/maintenance/charges/${id}/mark-paid`),
+  listPayments: (params) => api.get('/maintenance/payments/list', { params }),
+  recordPayment: (data) => api.post('/maintenance/payment/create', data),
+  getPayment: (id) => api.get(`/maintenance/payments/${id}`),
+  getFlatSummary: (flatId) => api.get(`/maintenance/summary/flat/${flatId}`),
+  getMemberSummary: (memberId) => api.get(`/maintenance/summary/member/${memberId}`),
+  getConfigs: () => api.get('/maintenance/config/list'),
+  createConfig: (data) => api.post('/maintenance/config/create', data),
+};
+
+export const noticeAPI = {
+  listNotices: (params) => api.get('/notices/notices/list', { params }),
+  createNotice: (data) => api.post('/notices/notice/create', data),
+  getNotice: (id) => api.get(`/notices/notices/${id}`),
+  updateNotice: (id, data) => api.put(`/notices/notices/${id}`, data),
+  deleteNotice: (id) => api.delete(`/notices/notices/${id}`),
+  listComplaints: (params) => api.get('/notices/complaints/list', { params }),
+  createComplaint: (data) => api.post('/notices/complaint/create', data),
+  getComplaint: (id) => api.get(`/notices/complaints/${id}`),
+  updateComplaint: (id, data) => api.put(`/notices/complaints/${id}`, data),
+  deleteComplaint: (id) => api.delete(`/notices/complaints/${id}`),
+  getMemberComplaints: (memberId) => api.get(`/notices/complaints/member/${memberId}`),
+  getComplaintsStats: () => api.get('/notices/complaints/summary/statistics'),
+};
+
 export const invoicesAPI = {
   list: () => api.get('/invoices/list'),
   create: (data) => api.post('/invoices/create', data),

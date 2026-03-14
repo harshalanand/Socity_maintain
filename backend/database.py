@@ -30,5 +30,31 @@ def get_db():
         db.close()
 
 def init_db():
-    """Initialize database tables"""
+    """Initialize database tables and create default admin user"""
     Base.metadata.create_all(bind=engine)
+    
+    # Create default admin user if it doesn't exist
+    from models import User, UserRole
+    from passlib.context import CryptContext
+    
+    db = SessionLocal()
+    try:
+        # Check if admin user already exists
+        admin_user = db.query(User).filter(User.username == "admin").first()
+        if not admin_user:
+            pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            admin_user = User(
+                username="admin",
+                email="admin@aashiyana.com",
+                password_hash=pwd_context.hash("admin"),
+                full_name="System Administrator",
+                role=UserRole.ADMIN
+            )
+            db.add(admin_user)
+            db.commit()
+            print("✓ Default admin user created (username: admin, password: admin)")
+    except Exception as e:
+        print(f"Error creating default admin user: {e}")
+        db.rollback()
+    finally:
+        db.close()

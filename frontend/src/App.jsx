@@ -4,6 +4,9 @@ import { Dashboard } from './pages/Dashboard';
 import { Projects } from './pages/Projects';
 import { Expenses } from './pages/Expenses';
 import { Assets } from './pages/Assets';
+import { Members } from './pages/Members';
+import { Maintenance } from './pages/Maintenance';
+import { Login } from './pages/Login';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import {
   LayoutDashboard,
@@ -15,19 +18,29 @@ import {
   BarChart3,
   Menu,
   X,
-  LogOut
+  LogOut,
+  Home
 } from 'lucide-react';
 
 function AppContent() {
   const { isAuthenticated, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  // Don't show sidebar on login page
   if (!isAuthenticated) {
-    return <Navigate to="/login" />;
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Navigate to="/login" />} />
+      </Routes>
+    );
   }
 
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+    { icon: Home, label: 'Flats', path: '/flats' },
+    { icon: Users, label: 'Members', path: '/members' },
+    { icon: DollarSign, label: 'Maintenance', path: '/maintenance' },
     { icon: ClipboardList, label: 'Projects', path: '/projects' },
     { icon: DollarSign, label: 'Expenses', path: '/expenses' },
     { icon: Package, label: 'Assets', path: '/assets' },
@@ -75,6 +88,8 @@ function AppContent() {
       <div className={`flex-1 ${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/members" element={<Members />} />
+          <Route path="/maintenance" element={<Maintenance />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/expenses" element={<Expenses />} />
           <Route path="/assets" element={<Assets />} />

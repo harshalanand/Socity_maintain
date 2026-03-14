@@ -19,7 +19,7 @@ load_dotenv()
 from database import init_db
 
 # Import routes
-from routes import auth, users, projects, expenses, assets, vendors, quotations, invoices, analytics
+from routes import auth, users, projects, expenses, assets, vendors, quotations, invoices, analytics, members, maintenance, flats, notices
 
 # Initialize database on startup
 @asynccontextmanager
@@ -61,6 +61,10 @@ app.include_router(vendors.router, prefix="/api/vendors", tags=["Vendors"])
 app.include_router(quotations.router, prefix="/api/quotations", tags=["Quotations"])
 app.include_router(invoices.router, prefix="/api/invoices", tags=["Invoices"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
+app.include_router(members.router, prefix="/api/members", tags=["Members Management"])
+app.include_router(maintenance.router, prefix="/api/maintenance", tags=["Maintenance Charges"])
+app.include_router(flats.router, prefix="/api/flats", tags=["Flats/Units"])
+app.include_router(notices.router, prefix="/api/notices", tags=["Notices & Complaints"])
 
 # Root endpoint
 @app.get("/")
@@ -68,7 +72,7 @@ async def root():
     """Root endpoint with API information"""
     return {
         "message": "Aashiyana Homes Society Management System API",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "documentation": "Visit http://localhost:8000/docs",
         "features": [
             "Project Management",
@@ -77,7 +81,15 @@ async def root():
             "Vendor Management",
             "Quotations",
             "Invoices",
-            "Analytics & Reports"
+            "Analytics & Reports",
+            "Society Members Management",
+            "Flat/Unit Management",
+            "Maintenance Charges & Payments",
+            "Utility Tracking",
+            "Notices & Announcements",
+            "Complaints Management",
+            "Committee Management",
+            "Meeting Minutes"
         ]
     }
 
